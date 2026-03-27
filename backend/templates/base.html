@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}AccessDocs{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0f1419;
+      --bg-soft: #161d26;
+      --surface: #1c2530;
+      --surface-hover: #232e3d;
+      --border: rgba(255,255,255,.08);
+      --text: #e8eef4;
+      --text-muted: #8b9aab;
+      --accent: #3b82f6;
+      --accent-hover: #60a5fa;
+      --danger: #f87171;
+      --success: #4ade80;
+      --warn: #fbbf24;
+      --radius: 12px;
+      --font: "DM Sans", system-ui, sans-serif;
+      --shadow: 0 4px 24px rgba(0,0,0,.35);
+    }
+    * { box-sizing: border-box; }
+    html { font-size: 16px; scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--font);
+      line-height: 1.55;
+      color: var(--text);
+      background: radial-gradient(1200px 600px at 10% -10%, rgba(59,130,246,.12), transparent),
+                  radial-gradient(800px 400px at 90% 0%, rgba(74,222,128,.06), transparent),
+                  var(--bg);
+    }
+    a { color: var(--accent); text-decoration: none; transition: color .15s; }
+    a:hover { color: var(--accent-hover); }
+    .shell {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 0 1.25rem 3rem;
+    }
+    header.site-header {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      backdrop-filter: blur(12px);
+      background: rgba(15,20,25,.85);
+      border-bottom: 1px solid var(--border);
+    }
+    .header-inner {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: .875rem 1.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .brand {
+      font-weight: 700;
+      font-size: 1.1rem;
+      letter-spacing: -.02em;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+    }
+    .brand span {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--success));
+    }
+    nav.header-nav {
+      display: flex;
+      align-items: center;
+      gap: .35rem;
+      flex-wrap: wrap;
+    }
+    nav.header-nav a, nav.header-nav button.nav-link {
+      color: var(--text-muted);
+      font-size: .9rem;
+      font-weight: 500;
+      padding: .45rem .75rem;
+      border-radius: 8px;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    nav.header-nav a:hover, nav.header-nav button.nav-link:hover {
+      color: var(--text);
+      background: var(--surface);
+    }
+    main { padding-top: 2rem; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.75rem 2rem;
+      box-shadow: var(--shadow);
+    }
+    .card h1 {
+      margin: 0 0 .5rem;
+      font-size: 1.65rem;
+      font-weight: 700;
+      letter-spacing: -.03em;
+    }
+    .lead { margin: 0 0 1.25rem; color: var(--text-muted); font-size: 1rem; }
+    label {
+      display: block;
+      font-weight: 600;
+      font-size: .85rem;
+      margin-top: 1.15rem;
+      color: var(--text-muted);
+    }
+    input[type="text"],
+    input[type="password"],
+    input[type="file"],
+    textarea {
+      width: 100%;
+      max-width: 100%;
+      margin-top: .35rem;
+      padding: .65rem .85rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg-soft);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 1rem;
+    }
+    input:focus, textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(59,130,246,.2);
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: .5rem;
+      margin-top: 1.35rem;
+      padding: .65rem 1.25rem;
+      background: var(--accent);
+      color: #fff !important;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: .95rem;
+      cursor: pointer;
+      font-family: inherit;
+      transition: background .15s, transform .1s;
+    }
+    .btn:hover { background: var(--accent-hover); }
+    .btn:active { transform: scale(.98); }
+    .btn:disabled { opacity: .55; cursor: not-allowed; transform: none; }
+    .btn-ghost {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text) !important;
+    }
+    .btn-ghost:hover { background: var(--surface-hover); }
+    .errors {
+      background: rgba(248,113,113,.12);
+      border: 1px solid rgba(248,113,113,.35);
+      color: var(--danger);
+      padding: .85rem 1rem;
+      border-radius: 8px;
+      margin-bottom: 1rem;
+      font-size: .9rem;
+    }
+    .errors ul { margin: 0; padding-left: 1.1rem; }
+    code {
+      font-size: .84em;
+      background: var(--bg-soft);
+      padding: .15rem .4rem;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
+    .muted { color: var(--text-muted); font-size: .9rem; }
+    .hint { font-size: .8rem; margin-top: .35rem; color: var(--text-muted); }
+    .table-wrap { overflow-x: auto; margin-top: 1.25rem; border-radius: 8px; border: 1px solid var(--border); }
+    table.data {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .9rem;
+      background: var(--bg-soft);
+    }
+    .data th, .data td {
+      text-align: left;
+      padding: .75rem 1rem;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    .data th { color: var(--text-muted); font-weight: 600; font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; }
+    .data tr:last-child td { border-bottom: none; }
+    .data tbody tr:hover { background: var(--surface); }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: .35rem;
+      padding: .2rem .55rem;
+      border-radius: 999px;
+      font-size: .72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .03em;
+    }
+    .badge-pending { background: rgba(251,191,36,.15); color: var(--warn); }
+    .badge-processing { background: rgba(59,130,246,.2); color: #93c5fd; }
+    .badge-ready { background: rgba(74,222,128,.15); color: var(--success); }
+    .badge-failed { background: rgba(248,113,113,.15); color: var(--danger); }
+    .live-dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--success);
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: .35; }
+    }
+    .sync-note { font-size: .8rem; color: var(--text-muted); margin-top: .75rem; display: flex; align-items: center; gap: .5rem; }
+    {% block extra_css %}{% endblock %}
+  </style>
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <a href="{% url 'home' %}" class="brand" style="text-decoration:none;"><span></span> AccessDocs</a>
+      <nav class="header-nav">
+        {% if user.is_staff %}
+          <a href="{% url 'upload' %}">Upload</a>
+          <a href="{% url 'dashboard' %}">Dashboard</a>
+          <form action="{% url 'logout' %}" method="post" style="display:inline;margin:0;">
+            {% csrf_token %}
+            <button type="submit" class="nav-link">Sign out</button>
+          </form>
+        {% else %}
+          <a href="{% url 'login' %}">Staff sign in</a>
+        {% endif %}
+      </nav>
+    </div>
+  </header>
+  <div class="shell">
+    <main>
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</body>
+</html>

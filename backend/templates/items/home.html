@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}AccessDocs Pilot{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>AccessDocs Pilot</h1>
+  <p class="lead">Publish PDFs as searchable documentation. Public metadata is available from the read-only API.</p>
+  <p class="muted">Storage is budgeted and renewable. This pilot does not claim permanence.</p>
+  <div style="display:flex;flex-wrap:wrap;gap:.75rem;margin-top:1.5rem;">
+    <a class="btn btn-ghost" href="/api/items/" style="margin:0;">Browse API</a>
+    {% if not user.is_staff %}
+    <a class="btn" href="{% url 'login' %}" style="margin:0;">Staff sign in</a>
+    {% else %}
+    <a class="btn" href="{% url 'upload' %}" style="margin:0;">Upload</a>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

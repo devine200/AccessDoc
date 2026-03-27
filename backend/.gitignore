@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.py[cod]
+db.sqlite3
+media/
+staticfiles/*
+!staticfiles/.gitkeep
+.env
+
+# Docusaurus output per upload (folder name = PublishedItem UUID); keep only .gitkeep tracked
+templates/doc_builds/*
+!templates/doc_builds/.gitkeep

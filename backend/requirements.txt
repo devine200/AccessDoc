@@ -1,0 +1,10 @@
+Django>=5.0,<5.2
+djangorestframework>=3.15,<4
+celery>=5.3,<6
+redis>=5,<8
+python-dotenv>=1.0,<2
+# PDF pipeline (backend/utils: PyMuPDF, Pillow, Tesseract bindings)
+pymupdf>=1.24,<2
+pillow>=10,<13
+pytesseract>=0.3.13,<0.4
+whitenoise>=6.6,<7

@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Upload · AccessDocs{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Upload a document</h1>
+  <p class="lead">PDF only. After upload you are taken to the dashboard where processing status updates automatically.</p>
+  {% if errors %}
+  <div class="errors">
+    <ul>
+      {% for e in errors %}<li>{{ e }}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+  <form id="upload-form" method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    <label for="title">Title</label>
+    <input id="title" name="title" type="text" value="{{ title|default:'' }}" required>
+
+    <label for="description">Description</label>
+    <textarea id="description" name="description" rows="3" placeholder="Optional. Shown in the docs sidebar category.">{{ description|default:'' }}</textarea>
+
+    <label for="source_file">PDF file</label>
+    <input id="source_file" name="source_file" type="file" accept="application/pdf,.pdf" required>
+    <p id="file-hint" class="hint"></p>
+
+    <button class="btn" type="submit" id="submit-btn">Upload and process</button>
+  </form>
+</div>
+<script>
+(function () {
+  var input = document.getElementById("source_file");
+  var hint = document.getElementById("file-hint");
+  var form = document.getElementById("upload-form");
+  var btn = document.getElementById("submit-btn");
+  function fmt(n) {
+    if (n < 1024) return n + " B";
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+    return (n / (1024 * 1024)).toFixed(1) + " MB";
+  }
+  input.addEventListener("change", function () {
+    if (!input.files || !input.files[0]) {
+      hint.textContent = "";
+      return;
+    }
+    var f = input.files[0];
+    hint.textContent = f.name + " · " + fmt(f.size);
+  });
+  form.addEventListener("submit", function () {
+    btn.disabled = true;
+    btn.textContent = "Uploading…";
+  });
+})();
+</script>
+{% endblock %}

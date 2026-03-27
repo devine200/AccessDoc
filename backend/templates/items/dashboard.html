@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · AccessDocs{% endblock %}
+{% block content %}
+<div class="card">
+  <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:1rem;">
+    <div>
+      <h1 style="margin-bottom:.35rem;">Publishing dashboard</h1>
+      <p class="lead" style="margin:0;">Documents and processing status. Rows refresh while uploads are pending or processing.</p>
+    </div>
+    <a class="btn btn-ghost" href="{% url 'upload' %}" style="margin:0;">New upload</a>
+  </div>
+  <p class="muted" style="margin-top:.75rem;">Public API (ready items only): <code>/api/items/</code> and <code>/api/items/&lt;uuid&gt;/</code></p>
+  <div class="sync-note" id="sync-status">
+    <span class="live-dot" id="sync-dot" style="display:none;"></span>
+    <span id="sync-text">Live updates on.</span>
+  </div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Title</th>
+          <th>Status</th>
+          <th>Pages</th>
+          <th>API</th>
+          <th>Viewer</th>
+        </tr>
+      </thead>
+      <tbody id="items-body">
+        {% include "items/dashboard_rows.html" %}
+      </tbody>
+    </table>
+  </div>
+</div>
+<script>
+(function () {
+  var body = document.getElementById("items-body");
+  var dot = document.getElementById("sync-dot");
+  var syncText = document.getElementById("sync-text");
+  var viewerPrefix = "{{ viewer_prefix|escapejs }}";
+  var intervalMs = {{ poll_interval_ms }};
+  function badgeClass(status) {
+    if (status === "pending") return "badge-pending";
+    if (status === "processing") return "badge-processing";
+    if (status === "ready") return "badge-ready";
+    if (status === "failed") return "badge-failed";
+    return "";
+  }
+  function esc(s) {
+    if (!s) return "";
+    var d = document.createElement("div");
+    d.textContent = s;
+    return d.innerHTML;
+  }
+  function rowHtml(item) {
+    var err = item.error_message && item.status === "failed"
+      ? '<br><span class="muted">' + esc(item.error_message.slice(0, 120)) + (item.error_message.length > 120 ? "…" : "") + '</span>'
+      : "";
+    var pages = item.page_count != null ? String(item.page_count) : "—";
+    var apiCell = '<a href="/api/items/' + esc(item.id) + '/"><code>/api/items/' + esc(item.id) + '/</code></a>';
+    var viewerCell = item.status === "ready"
+      ? '<a href="' + esc(item.viewer_docs_url || (viewerPrefix + '/' + item.id + '/docs/intro/')) + '">Open docs</a>'
+      : "—";
+    return (
+      '<tr data-id="' + esc(item.id) + '">' +
+      '<td><strong>' + esc(item.title) + '</strong><br><span class="muted">' + esc(item.slug) + '</span></td>' +
+      '<td><span class="badge ' + badgeClass(item.status) + '">' + esc(item.status_display) + '</span>' + err + '</td>' +
+      '<td>' + pages + '</td>' +
+      '<td>' + apiCell + '</td>' +
+      '<td>' + viewerCell + '</td>' +
+      '</tr>'
+    );
+  }
+  function render(items) {
+    if (!items.length) {
+      body.innerHTML = '<tr><td colspan="5" class="muted">No uploads yet.</td></tr>';
+      return;
+    }
+    body.innerHTML = items.map(rowHtml).join("");
+  }
+  function needsActivity(items) {
+    return items.some(function (i) {
+      return i.status === "pending" || i.status === "processing";
+    });
+  }
+  var timer = null;
+  function tick() {
+    fetch("{% url 'dashboard_items_json' %}", { credentials: "same-origin" })
+      .then(function (r) {
+        if (!r.ok) throw new Error("status " + r.status);
+        return r.json();
+      })
+      .then(function (data) {
+        var items = data.items || [];
+        render(items);
+        if (needsActivity(items)) {
+          dot.style.display = "inline-block";
+          syncText.textContent = "Watching for status changes…";
+        } else {
+          dot.style.display = "none";
+          syncText.textContent = "All jobs settled — still checking every " + (intervalMs / 1000) + "s.";
+        }
+      })
+      .catch(function () {
+        syncText.textContent = "Could not refresh status. Retrying…";
+      });
+  }
+  tick();
+  timer = setInterval(tick, intervalMs);
+})();
+</script>
+{% endblock %}
