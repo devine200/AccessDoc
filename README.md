@@ -102,23 +102,23 @@ python manage.py runserver
 - Read-only API (published items only): `http://127.0.0.1:8000/api/items/`
 - Viewer: `http://127.0.0.1:8000/viewer/<item-uuid>/docs/intro/`
 
-## Docker (Gunicorn)
+## Docker (build + web + Celery worker)
 
-Build context is the **repository root**. The image installs **`demo_docs`** npm dependencies (`npm ci`), **`backend`** Python dependencies, runs **`collectstatic`**, then starts **Gunicorn** on port **8000**.
+The **Dockerfile** only **prepares the codebase**: Node 20, **`demo_docs/`** `npm ci`, Python deps, **`collectstatic`**. Nothing long-running is started during the image build except what Django needs for static collection.
+
+**`docker compose up --build`** starts three services from that image:
+
+- **redis** — broker and result backend for Celery.
+- **web** — migrates, optional default superuser (**admin** / **admin** unless `SKIP_DEFAULT_SUPERUSER=1`), then **Gunicorn** on port **8000** with **`ACCESSDOC_USE_CELERY=true`** so uploads enqueue tasks.
+- **worker** — migrates, then **only** `celery -A accessdoc worker` (no Gunicorn, no superuser). `ACCESSDOC_CONTAINER_ROLE=worker` selects this path in `docker/entrypoint.sh`.
+
+Named volumes persist **`media/`**, **`templates/doc_builds/`**, and a **shared SQLite** database under **`ACCESSDOC_SQLITE_DIR=/app/backend/data`** so the web app and worker see the same DB.
 
 ```bash
 # From repo root — set DJANGO_SECRET_KEY in the environment or a .env file next to compose
 export DJANGO_SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_urlsafe(50))")
 docker compose up --build
-# http://127.0.0.1:8000/ — entrypoint runs createsuperuser --noinput (admin / admin) unless SKIP_DEFAULT_SUPERUSER=1
-```
-
-Named volumes keep **`media/`** uploads and **`templates/doc_builds/`** across restarts. SQLite lives in the container layer unless you bind-mount `backend/db.sqlite3`.
-
-Optional **Celery + Redis** (same image, worker runs from `/app/backend`):
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.celery.yml up --build
+# http://127.0.0.1:8000/
 ```
 
 ## Backend tests

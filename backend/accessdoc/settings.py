@@ -89,10 +89,15 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "accessdoc.wsgi.application"
 
+# Optional shared DB dir (e.g. Docker volume mounted at the same path on web + Celery worker).
+_sqlite_dir = os.environ.get("ACCESSDOC_SQLITE_DIR", "").strip()
+_sqlite_path = (
+    Path(_sqlite_dir) / "db.sqlite3" if _sqlite_dir else BASE_DIR / "db.sqlite3"
+)
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "NAME": _sqlite_path,
     }
 }
 
