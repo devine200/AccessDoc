@@ -47,6 +47,12 @@ ALLOWED_HOSTS = [
     if h.strip()
 ]
 
+# Railway injects ``RAILWAY_PUBLIC_DOMAIN`` (e.g. ``accessdoc-production.up.railway.app``) when
+# public networking is enabled — add it so Host / CSRF checks match the browser URL.
+_railway_public_domain = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "").strip()
+if _railway_public_domain and _railway_public_domain not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS = [*ALLOWED_HOSTS, _railway_public_domain]
+
 # HTTPS production: comma-separated full origins (scheme + host, optional port). Required for many
 # POST/login flows in Django 4+ when the site is not localhost. Example:
 #   DJANGO_CSRF_TRUSTED_ORIGINS=https://app.example.com,https://www.example.com
@@ -54,10 +60,24 @@ _csrf_trusted = os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").strip()
 CSRF_TRUSTED_ORIGINS = [
     o.strip().rstrip("/") for o in _csrf_trusted.split(",") if o.strip()
 ]
+if _railway_public_domain:
+    _railway_origin = f"https://{_railway_public_domain}".rstrip("/")
+    if _railway_origin not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS = [*CSRF_TRUSTED_ORIGINS, _railway_origin]
 
 # nginx / Traefik / cloud LB terminates TLS — without this, Django sees http:// and CSRF/session
 # cookies marked Secure may not align with what the browser sends.
-if os.environ.get("DJANGO_BEHIND_PROXY", "").lower() in ("1", "true", "yes"):
+# On Railway, HTTPS is at the edge: default to proxy headers when ``RAILWAY_PUBLIC_DOMAIN`` is set,
+# unless ``DJANGO_BEHIND_PROXY`` is explicitly false.
+_behind_proxy = os.environ.get("DJANGO_BEHIND_PROXY", "").strip().lower()
+if _behind_proxy in ("0", "false", "no"):
+    _use_proxy_headers = False
+elif _behind_proxy in ("1", "true", "yes"):
+    _use_proxy_headers = True
+else:
+    _use_proxy_headers = bool(_railway_public_domain)
+
+if _use_proxy_headers:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     USE_X_FORWARDED_HOST = True
 
