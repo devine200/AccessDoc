@@ -18,6 +18,11 @@ const config: Config = {
 
   onBrokenLinks: 'warn',
 
+  // PDF-extracted docs often contain "<3s", "{ ... }" snippets, etc. MDX would treat those as JSX.
+  markdown: {
+    format: 'md',
+  },
+
   i18n: {
     defaultLocale: 'en',
     locales: ['en'],

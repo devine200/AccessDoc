@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -18,13 +20,18 @@ from rest_framework.test import APIClient
 
 from accessdoc.views import serve_publish_build
 from items.models import PublishedItem
+from items.pdf_validation import pdf_upload_rejection_reason
 from items.tasks import process_published_item
 from items.utils import slugify_label, unique_slug, viewer_item_docs_url
 from utils.main import (
     RESERVED_DOC_IDS,
+    OutputLayout,
     _allocate_doc_id,
     _stem_matching_docusaurus_default_id,
+    export_markdown_pages,
+    process_pdf,
 )
+from utils.pipeline import run_pdf_pipeline
 
 
 def _input_pdf_path(filename: str) -> Path:
@@ -52,6 +59,92 @@ def _doc_mount_segment() -> str:
     """Match ``accessdoc.urls`` mount derived from ``DOCUSAURUS_BASE_URL`` (no overrides)."""
     raw = (settings.DOCUSAURUS_BASE_URL or "").strip("/")
     return raw or "viewer"
+
+
+class VeriFrontPdfFixtureTests(TestCase):
+    """
+    Regression: PDFs with technical text (e.g. ``<50ms``, ``{ ... }``) must not break
+    Docusaurus — site uses CommonMark (``markdown.format: 'md'``) so uploads build cleanly.
+    """
+
+    def test_process_and_export_verifront_pdf(self):
+        pdf = _input_pdf_path("verifront_esp.pdf")
+        layout = OutputLayout(tempfile.mkdtemp())
+        self.addCleanup(lambda: shutil.rmtree(layout.root, ignore_errors=True))
+        document = process_pdf(str(pdf), layout)
+        self.assertGreaterEqual(len(document["pages"]), 1)
+        meta = export_markdown_pages(document, layout)
+        self.assertEqual(len(meta), len(document["pages"]))
+        texts = [
+            (Path(layout.pages) / f"{row['doc_id']}.md").read_text(encoding="utf-8")
+            for row in meta
+        ]
+        self.assertTrue(
+            any("<" in t for t in texts),
+            "Fixture should include prose with '<' so we catch MDX vs CommonMark regressions.",
+        )
+
+    def test_upload_validation_accepts_double_pdf_suffix_and_percent_encoding_in_name(self):
+        raw = b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n"
+        upload = SimpleUploadedFile(
+            "VeriFront-%20Answers%20to%20ESP.pdf.pdf",
+            raw,
+            content_type="application/pdf",
+        )
+        self.assertIsNone(pdf_upload_rejection_reason(upload))
+
+    @unittest.skipUnless(
+        os.environ.get("ACCESSDOC_FULL_DOC_BUILD_TESTS", "").lower()
+        in ("1", "true", "yes"),
+        "Set ACCESSDOC_FULL_DOC_BUILD_TESTS=1 to run npm build (slow).",
+    )
+    def test_verifront_pdf_full_pipeline_including_npm_build(self):
+        if not shutil.which("npm"):
+            self.skipTest("npm not on PATH")
+        pdf = _input_pdf_path("verifront_esp.pdf")
+        work = tempfile.mkdtemp()
+        builds = tempfile.mkdtemp()
+        self.addCleanup(lambda: shutil.rmtree(work, ignore_errors=True))
+        self.addCleanup(lambda: shutil.rmtree(builds, ignore_errors=True))
+        repo_root = Path(settings.UTILS_DIR).resolve().parent.parent
+        src_docs = repo_root / "demo_docs"
+        if not src_docs.is_dir():
+            self.skipTest(f"demo_docs not found at {src_docs}")
+        tmp_root = tempfile.mkdtemp()
+        self.addCleanup(lambda: shutil.rmtree(tmp_root, ignore_errors=True))
+        docusaurus_root = Path(tmp_root) / "demo_docs"
+        shutil.copytree(
+            src_docs,
+            docusaurus_root,
+            ignore=shutil.ignore_patterns(
+                "node_modules", "build", ".docusaurus", ".cache-loader"
+            ),
+        )
+        subprocess.run(
+            ["npm", "ci"],
+            cwd=str(docusaurus_root),
+            check=True,
+            timeout=600,
+        )
+
+        pub_id = "00000000-0000-4000-8000-000000000099"
+        result = run_pdf_pipeline(
+            str(pdf),
+            work_dir=work,
+            publish_id=pub_id,
+            title="VeriFront ESP",
+            description="integration",
+            docusaurus_root=str(docusaurus_root),
+            builds_root=builds,
+            build_env={
+                "DOCUSAURUS_BASE_URL": f"/viewer/{pub_id}/",
+                "DOCUSAURUS_SITE_TITLE": "VeriFront",
+            },
+            run_build=True,
+        )
+        self.assertGreater(result.get("pages_copied", 0), 0)
+        out = Path(result["build_dir"])
+        self.assertTrue((out / "docs" / "intro" / "index.html").is_file())
 
 
 class PublishedItemAPITests(TestCase):
