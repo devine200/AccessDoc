@@ -1,0 +1,46 @@
+# Optional overlay: Redis + Celery worker (use with main compose).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.celery.yml up --build
+#
+# Set on the web service: ACCESSDOC_USE_CELERY=true (e.g. in .env).
+
+services:
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  web:
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      ACCESSDOC_USE_CELERY: "true"
+
+  celery_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: >
+      celery -A accessdoc worker -l info
+    working_dir: /app/backend
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-change-me-use-env-file}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-false}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      ACCESSDOC_REPO_ROOT: /app
+      ACCESSDOC_USE_CELERY: "true"
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      DOCUSAURUS_BASE_URL: ${DOCUSAURUS_BASE_URL:-/viewer/}
+    volumes:
+      - backend_media:/app/backend/media
+      - doc_builds:/app/backend/templates/doc_builds
+    depends_on:
+      redis:
+        condition: service_healthy

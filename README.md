@@ -34,6 +34,7 @@ cp .env.example .env        # optional; defaults work for local dev
 python manage.py migrate
 python manage.py collectstatic --noinput
 python manage.py createsuperuser
+# non-interactive (e.g. scripts): DJANGO_SUPERUSER_USERNAME=admin DJANGO_SUPERUSER_EMAIL=admin@localhost DJANGO_SUPERUSER_PASSWORD=admin python manage.py createsuperuser --noinput
 ```
 
 ### Environment variables
@@ -100,6 +101,25 @@ python manage.py runserver
 - Dashboard (staff): `http://127.0.0.1:8000/dashboard/` — “Open docs” uses the item’s UUID (same as the API).
 - Read-only API (published items only): `http://127.0.0.1:8000/api/items/`
 - Viewer: `http://127.0.0.1:8000/viewer/<item-uuid>/docs/intro/`
+
+## Docker (Gunicorn)
+
+Build context is the **repository root**. The image installs **`demo_docs`** npm dependencies (`npm ci`), **`backend`** Python dependencies, runs **`collectstatic`**, then starts **Gunicorn** on port **8000**.
+
+```bash
+# From repo root — set DJANGO_SECRET_KEY in the environment or a .env file next to compose
+export DJANGO_SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_urlsafe(50))")
+docker compose up --build
+# http://127.0.0.1:8000/ — entrypoint runs createsuperuser --noinput (admin / admin) unless SKIP_DEFAULT_SUPERUSER=1
+```
+
+Named volumes keep **`media/`** uploads and **`templates/doc_builds/`** across restarts. SQLite lives in the container layer unless you bind-mount `backend/db.sqlite3`.
+
+Optional **Celery + Redis** (same image, worker runs from `/app/backend`):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.celery.yml up --build
+```
 
 ## Backend tests
 

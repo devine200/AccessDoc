@@ -1,0 +1,27 @@
+# AccessDocDemo — Gunicorn + Django + demo_docs (Node deps baked in).
+# Default: ACCESSDOC_USE_CELERY=false (PDF jobs run in a background thread; no Redis required).
+# For Celery, set ACCESSDOC_USE_CELERY=true and run a worker + Redis (see docker-compose.celery.yml).
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-change-me-use-env-file}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-false}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,0.0.0.0,web}
+      ACCESSDOC_REPO_ROOT: /app
+      ACCESSDOC_USE_CELERY: ${ACCESSDOC_USE_CELERY:-false}
+      DOCUSAURUS_BASE_URL: ${DOCUSAURUS_BASE_URL:-/viewer/}
+      # Set to 1 in production if you do not want admin/admin created on startup
+      SKIP_DEFAULT_SUPERUSER: ${SKIP_DEFAULT_SUPERUSER:-0}
+    volumes:
+      - backend_media:/app/backend/media
+      - doc_builds:/app/backend/templates/doc_builds
+
+volumes:
+  backend_media:
+  doc_builds:
