@@ -47,6 +47,31 @@ ALLOWED_HOSTS = [
     if h.strip()
 ]
 
+# HTTPS production: comma-separated full origins (scheme + host, optional port). Required for many
+# POST/login flows in Django 4+ when the site is not localhost. Example:
+#   DJANGO_CSRF_TRUSTED_ORIGINS=https://app.example.com,https://www.example.com
+_csrf_trusted = os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").strip()
+CSRF_TRUSTED_ORIGINS = [
+    o.strip().rstrip("/") for o in _csrf_trusted.split(",") if o.strip()
+]
+
+# nginx / Traefik / cloud LB terminates TLS — without this, Django sees http:// and CSRF/session
+# cookies marked Secure may not align with what the browser sends.
+if os.environ.get("DJANGO_BEHIND_PROXY", "").lower() in ("1", "true", "yes"):
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    USE_X_FORWARDED_HOST = True
+
+# In production (DEBUG off), use Secure cookies when the site is served over HTTPS.
+if not DEBUG:
+    _insecure_cookies = os.environ.get("DJANGO_INSECURE_COOKIES", "").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+    if not _insecure_cookies:
+        SESSION_COOKIE_SECURE = True
+        CSRF_COOKIE_SECURE = True
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
