@@ -33,10 +33,12 @@ RUN chmod +x /entrypoint.sh
 WORKDIR /app/backend
 
 ARG DJANGO_SECRET_KEY=docker-build-collectstatic-only
+# Placeholder URL so settings load; image build does not connect (--skip-checks).
 ENV DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY} \
     DJANGO_DEBUG=false \
-    DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
-RUN python manage.py collectstatic --noinput
+    DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1 \
+    DATABASE_URL=postgresql://accessdoc:accessdoc@127.0.0.1:5432/accessdoc
+RUN python manage.py collectstatic --noinput --skip-checks
 
 EXPOSE 8000
 

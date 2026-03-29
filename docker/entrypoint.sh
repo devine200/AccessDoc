@@ -2,14 +2,17 @@
 set -e
 cd /app/backend
 mkdir -p media templates/doc_builds
-if [ -n "${ACCESSDOC_SQLITE_DIR:-}" ]; then
-  mkdir -p "$ACCESSDOC_SQLITE_DIR"
-fi
 python manage.py migrate --noinput
 
-# worker: only run Celery (no Gunicorn, no dev superuser). Build already set up the codebase.
+# Dedicated worker container: Celery only (no Gunicorn, no dev superuser).
 if [ "${ACCESSDOC_CONTAINER_ROLE:-web}" = "worker" ]; then
-  exec celery -A accessdoc worker -l info
+  exec celery -A accessdoc worker -l info --concurrency="${CELERY_WORKER_CONCURRENCY:-1}"
+fi
+
+# Single-container deploy (e.g. one Railway service): run a Celery consumer alongside Gunicorn.
+# Do not use with a separate worker service or tasks may be processed twice.
+if [ "${ACCESSDOC_EMBEDDED_CELERY_WORKER:-}" = "1" ]; then
+  celery -A accessdoc worker -l info --concurrency="${CELERY_WORKER_CONCURRENCY:-1}" &
 fi
 
 # web (default)
