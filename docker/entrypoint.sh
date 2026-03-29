@@ -9,11 +9,14 @@ if [ "${ACCESSDOC_CONTAINER_ROLE:-web}" = "worker" ]; then
   exec celery -A accessdoc worker -l info --concurrency="${CELERY_WORKER_CONCURRENCY:-1}"
 fi
 
-# Single-container deploy (e.g. one Railway service): run a Celery consumer alongside Gunicorn.
-# Do not use with a separate worker service or tasks may be processed twice.
-if [ "${ACCESSDOC_EMBEDDED_CELERY_WORKER:-}" = "1" ]; then
-  celery -A accessdoc worker -l info --concurrency="${CELERY_WORKER_CONCURRENCY:-1}" &
-fi
+# Run Celery beside Gunicorn unless explicitly disabled (e.g. separate worker container).
+_emb=$(printf '%s' "${ACCESSDOC_EMBEDDED_CELERY_WORKER:-}" | tr '[:upper:]' '[:lower:]')
+case "$_emb" in
+  0|false|no) ;;
+  *)
+    celery -A accessdoc worker -l info --concurrency="${CELERY_WORKER_CONCURRENCY:-1}" &
+    ;;
+esac
 
 # web (default)
 if [ "${SKIP_DEFAULT_SUPERUSER:-}" != "1" ] && [ "${SKIP_DEFAULT_SUPERUSER:-}" != "true" ]; then
