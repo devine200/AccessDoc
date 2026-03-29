@@ -1,8 +1,7 @@
 # One image build (codebase setup only: see Dockerfile). Runtime:
 #   - postgres — required database (PostgreSQL only; no SQLite)
 #   - redis
-#   - web: Gunicorn (queues PDF work to Celery when ACCESSDOC_USE_CELERY=true)
-#   - worker: Celery worker only (ACCESSDOC_CONTAINER_ROLE=worker — no HTTP server)
+#   - web: Gunicorn + embedded Celery worker (ACCESSDOC_EMBEDDED_CELERY_WORKER=1) when ACCESSDOC_USE_CELERY=true
 
 services:
   postgres:
@@ -39,36 +38,12 @@ services:
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,0.0.0.0,web}
       DATABASE_URL: postgresql://accessdoc:accessdoc@postgres:5432/accessdoc
       ACCESSDOC_REPO_ROOT: /app
-      ACCESSDOC_CONTAINER_ROLE: web
+      ACCESSDOC_EMBEDDED_CELERY_WORKER: "1"
       ACCESSDOC_USE_CELERY: "true"
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
       DOCUSAURUS_BASE_URL: ${DOCUSAURUS_BASE_URL:-/viewer/}
       SKIP_DEFAULT_SUPERUSER: ${SKIP_DEFAULT_SUPERUSER:-0}
-    volumes:
-      - backend_media:/app/backend/media
-      - doc_builds:/app/backend/templates/doc_builds
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
-  worker:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    environment:
-      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-change-me-use-env-file}
-      DJANGO_DEBUG: ${DJANGO_DEBUG:-false}
-      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
-      DATABASE_URL: postgresql://accessdoc:accessdoc@postgres:5432/accessdoc
-      ACCESSDOC_REPO_ROOT: /app
-      ACCESSDOC_CONTAINER_ROLE: worker
-      ACCESSDOC_USE_CELERY: "true"
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/0
-      DOCUSAURUS_BASE_URL: ${DOCUSAURUS_BASE_URL:-/viewer/}
     volumes:
       - backend_media:/app/backend/media
       - doc_builds:/app/backend/templates/doc_builds

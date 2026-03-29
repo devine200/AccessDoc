@@ -112,18 +112,19 @@ python manage.py runserver
 - Read-only API (published items only): `http://127.0.0.1:8000/api/items/`
 - Viewer: `http://127.0.0.1:8000/viewer/<item-uuid>/docs/intro/`
 
-## Docker (build + web + Celery worker)
+## Docker (build + web with Gunicorn and Celery)
 
 The **Dockerfile** only **prepares the codebase**: Node 20, **`demo_docs/`** `npm ci`, Python deps, **`collectstatic`**. Nothing long-running is started during the image build except what Django needs for static collection.
 
-**`docker compose up --build`** starts four services from that image:
+**`docker compose up --build`** starts three services from that image:
 
 - **postgres** — PostgreSQL 16; user/password/db **`accessdoc`** (override by changing compose `DATABASE_URL` and `POSTGRES_*` together).
 - **redis** — broker and result backend for Celery.
-- **web** — migrates, optional default superuser (**admin** / **admin** unless `SKIP_DEFAULT_SUPERUSER=1`), then **Gunicorn** on port **8000** with **`ACCESSDOC_USE_CELERY=true`** so uploads enqueue tasks.
-- **worker** — migrates, then **only** `celery -A accessdoc worker` (no Gunicorn, no superuser). `ACCESSDOC_CONTAINER_ROLE=worker` selects this path in `docker/entrypoint.sh`.
+- **web** — migrates, optional default superuser (**admin** / **admin** unless `SKIP_DEFAULT_SUPERUSER=1`), starts **Celery** in the background (`ACCESSDOC_EMBEDDED_CELERY_WORKER=1`), then **Gunicorn** on port **8000** with **`ACCESSDOC_USE_CELERY=true`** so uploads enqueue tasks and the same container consumes them.
 
-Named volumes persist **`postgres_data`** (database), **`media/`**, and **`templates/doc_builds/`** so web and worker share Postgres and uploaded files.
+Named volumes persist **`postgres_data`** (database), **`media/`**, and **`templates/doc_builds/`** so uploads and builds stay on disk across restarts.
+
+For a **dedicated worker container only** (no HTTP), run the image with **`ACCESSDOC_CONTAINER_ROLE=worker`** (see `docker/entrypoint.sh`). Do not run that **and** **`ACCESSDOC_EMBEDDED_CELERY_WORKER=1`** on separate replicas of the same app, or tasks may be processed twice.
 
 ```bash
 # From repo root — set DJANGO_SECRET_KEY in the environment or a .env file next to compose
@@ -145,7 +146,7 @@ python manage.py test items
 
 ## Troubleshooting
 
-- **Upload stuck on “Pending” (production / Celery):** Typical causes: (1) **No worker** — only the web process is running; add a second service with `ACCESSDOC_CONTAINER_ROLE=worker` (Docker) or set **`ACCESSDOC_EMBEDDED_CELERY_WORKER=1`** on a **single** Railway/container so Celery runs beside Gunicorn. (2) **Wrong Redis URL** — platforms often set **`REDIS_URL`**; this project falls back to it when **`CELERY_BROKER_URL`** is unset. If both are missing, Django defaults to `127.0.0.1` and task enqueue fails (check server logs for *Failed to queue process_published_item*). (3) **Missing or different `DATABASE_URL`** — web and worker must use the **same** Postgres; otherwise the worker never sees new rows or uploads. (4) **Split media disk** — with two hosts without a shared volume, the worker may not see uploaded PDFs under `MEDIA_ROOT`; use Docker compose volumes (as in this repo), embedded worker, or object storage.
+- **Upload stuck on “Pending” (production / Celery):** Typical causes: (1) **No worker** — Celery is not running; Docker Compose in this repo runs an **embedded** worker with Gunicorn (`ACCESSDOC_EMBEDDED_CELERY_WORKER=1`). On Railway or a single container, set the same. (2) **Wrong Redis URL** — platforms often set **`REDIS_URL`**; this project falls back to it when **`CELERY_BROKER_URL`** is unset. If both are missing, Django defaults to `127.0.0.1` and task enqueue fails (check server logs for *Failed to queue process_published_item*). (3) **Missing or different `DATABASE_URL`** — every process must use the **same** Postgres. (4) **Split media disk** — if web and worker run on different machines without shared storage, the worker may not see uploaded PDFs under `MEDIA_ROOT`; use shared volumes or a single container with embedded Celery.
 - **Upload stuck on “Pending” (local):** With `DEBUG=true`, PDF jobs often run in a **background thread**. Use `ACCESSDOC_USE_CELERY=true` and `celery -A accessdoc worker` with Redis.
 - **Build fails inside the task:** From `demo_docs/`, run `npm install` and `npm run build` manually to capture errors; use Node 20+.
 - **Viewer 404 or broken styling:** The snapshot must be built with `DOCUSAURUS_BASE_URL=/viewer/<that-item’s-uuid>/`. The task sets this automatically.
