@@ -16,12 +16,19 @@ Doc structure inside `demo_docs/docs/`: **`intro.md`** (overview) and a **`docum
 ## Prerequisites
 
 - **Python** 3.11+ (3.13 works if your stack matches)
+- **PostgreSQL** 14+ (required; SQLite is not supported)
 - **Node.js** 20+ and **npm** (`npm run build` in `demo_docs/` from the worker; run `npm install` there once after clone)
 - **Redis** (Celery broker and result backend by default)
 - **Tesseract** (optional but recommended if PDFs need OCR; same as `backend/utils/` usage)
 - **PyMuPDF / Fitz** and **Pillow** (installed via `backend/requirements.txt`)
 
 ## Backend setup
+
+Start Postgres (example — adjust user, password, and database name to match `DATABASE_URL`):
+
+```bash
+docker run --name accessdoc-pg -e POSTGRES_USER=accessdoc -e POSTGRES_PASSWORD=accessdoc -e POSTGRES_DB=accessdoc -p 5432:5432 -d postgres:16-alpine
+```
 
 From the repository root:
 
@@ -30,7 +37,7 @@ cd backend
 python3 -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env        # optional; defaults work for local dev
+cp .env.example .env        # edit DATABASE_URL if your Postgres differs
 python manage.py migrate
 python manage.py collectstatic --noinput
 python manage.py createsuperuser
@@ -41,6 +48,7 @@ python manage.py createsuperuser
 
 See `backend/.env.example`. Common values:
 
+- **`DATABASE_URL`** — required, e.g. `postgresql://accessdoc:accessdoc@127.0.0.1:5432/accessdoc` (Railway/Heroku provide this automatically for managed Postgres)
 - `CELERY_BROKER_URL` / `CELERY_RESULT_BACKEND` — default `redis://127.0.0.1:6379/0`
 - `DOCUSAURUS_BASE_URL` — default `/viewer/`; each snapshot is served at `{DOCUSAURUS_BASE_URL}<uuid>/` with matching `baseUrl` at build time (`/viewer/<uuid>/`).
 - `ACCESSDOC_DOCUSAURUS_ROOT` — Docusaurus project path (default: repo `demo_docs/`)
@@ -67,14 +75,16 @@ The upload pipeline runs `npm run build` in `demo_docs/` after writing docs. **D
 
 ## Running the full stack locally
 
-**1. Redis**
+**1. PostgreSQL** — must match `DATABASE_URL` in `.env` (see Backend setup).
+
+**2. Redis**
 
 ```bash
 redis-server
 # or: docker run --rm -p 6379:6379 redis:7
 ```
 
-**2. Celery worker** (must see `node` and `npm` on `PATH` when processing uploads)
+**3. Celery worker** (must see `node` and `npm` on `PATH` when processing uploads)
 
 Run this from the **`backend/`** directory so Python can import the `accessdoc` package.
 
@@ -84,7 +94,7 @@ source .venv/bin/activate
 celery -A accessdoc worker -l info
 ```
 
-**3. Django**
+**4. Django**
 
 ```bash
 cd backend
@@ -92,7 +102,7 @@ source .venv/bin/activate
 python manage.py runserver
 ```
 
-**4. Use the app**
+**5. Use the app**
 
 - Public home: `http://127.0.0.1:8000/`
 - Staff sign-in (web app): `http://127.0.0.1:8000/login/`
@@ -106,13 +116,14 @@ python manage.py runserver
 
 The **Dockerfile** only **prepares the codebase**: Node 20, **`demo_docs/`** `npm ci`, Python deps, **`collectstatic`**. Nothing long-running is started during the image build except what Django needs for static collection.
 
-**`docker compose up --build`** starts three services from that image:
+**`docker compose up --build`** starts four services from that image:
 
+- **postgres** — PostgreSQL 16; user/password/db **`accessdoc`** (override by changing compose `DATABASE_URL` and `POSTGRES_*` together).
 - **redis** — broker and result backend for Celery.
 - **web** — migrates, optional default superuser (**admin** / **admin** unless `SKIP_DEFAULT_SUPERUSER=1`), then **Gunicorn** on port **8000** with **`ACCESSDOC_USE_CELERY=true`** so uploads enqueue tasks.
 - **worker** — migrates, then **only** `celery -A accessdoc worker` (no Gunicorn, no superuser). `ACCESSDOC_CONTAINER_ROLE=worker` selects this path in `docker/entrypoint.sh`.
 
-Named volumes persist **`media/`**, **`templates/doc_builds/`**, and a **shared SQLite** database under **`ACCESSDOC_SQLITE_DIR=/app/backend/data`** so the web app and worker see the same DB.
+Named volumes persist **`postgres_data`** (database), **`media/`**, and **`templates/doc_builds/`** so web and worker share Postgres and uploaded files.
 
 ```bash
 # From repo root — set DJANGO_SECRET_KEY in the environment or a .env file next to compose
@@ -123,7 +134,10 @@ docker compose up --build
 
 ## Backend tests
 
+Requires a running PostgreSQL instance (Django creates a `test_*` database on the same server). Example:
+
 ```bash
+# If DATABASE_URL in .env points at localhost:5432
 cd backend
 source .venv/bin/activate
 python manage.py test items
@@ -131,7 +145,8 @@ python manage.py test items
 
 ## Troubleshooting
 
-- **Upload stuck on “Pending”:** With `DEBUG=true`, PDF jobs often run in a **background thread**. Use `ACCESSDOC_USE_CELERY=true` and a Celery worker from **`backend/`** with Redis.
+- **Upload stuck on “Pending” (production / Celery):** Typical causes: (1) **No worker** — only the web process is running; add a second service with `ACCESSDOC_CONTAINER_ROLE=worker` (Docker) or set **`ACCESSDOC_EMBEDDED_CELERY_WORKER=1`** on a **single** Railway/container so Celery runs beside Gunicorn. (2) **Wrong Redis URL** — platforms often set **`REDIS_URL`**; this project falls back to it when **`CELERY_BROKER_URL`** is unset. If both are missing, Django defaults to `127.0.0.1` and task enqueue fails (check server logs for *Failed to queue process_published_item*). (3) **Missing or different `DATABASE_URL`** — web and worker must use the **same** Postgres; otherwise the worker never sees new rows or uploads. (4) **Split media disk** — with two hosts without a shared volume, the worker may not see uploaded PDFs under `MEDIA_ROOT`; use Docker compose volumes (as in this repo), embedded worker, or object storage.
+- **Upload stuck on “Pending” (local):** With `DEBUG=true`, PDF jobs often run in a **background thread**. Use `ACCESSDOC_USE_CELERY=true` and `celery -A accessdoc worker` with Redis.
 - **Build fails inside the task:** From `demo_docs/`, run `npm install` and `npm run build` manually to capture errors; use Node 20+.
 - **Viewer 404 or broken styling:** The snapshot must be built with `DOCUSAURUS_BASE_URL=/viewer/<that-item’s-uuid>/`. The task sets this automatically.
 - **Concurrent uploads:** Serialized processing for `demo_docs/` is recommended; overlapping jobs can overwrite each other’s staged docs before build.

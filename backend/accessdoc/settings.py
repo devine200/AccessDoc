@@ -5,6 +5,8 @@ Django settings for accessdoc project.
 import os
 from pathlib import Path
 
+import dj_database_url
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -134,16 +136,19 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "accessdoc.wsgi.application"
 
-# Optional shared DB dir (e.g. Docker volume mounted at the same path on web + Celery worker).
-_sqlite_dir = os.environ.get("ACCESSDOC_SQLITE_DIR", "").strip()
-_sqlite_path = (
-    Path(_sqlite_dir) / "db.sqlite3" if _sqlite_dir else BASE_DIR / "db.sqlite3"
-)
+# PostgreSQL only (SQLite is not supported). Set ``DATABASE_URL`` everywhere: local, Docker, Railway.
+_database_url = os.environ.get("DATABASE_URL", "").strip()
+if not _database_url:
+    raise ImproperlyConfigured(
+        "DATABASE_URL is required (PostgreSQL). Example for local Docker Postgres:\n"
+        "  postgresql://accessdoc:accessdoc@127.0.0.1:5432/accessdoc"
+    )
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": _sqlite_path,
-    }
+    "default": dj_database_url.parse(
+        _database_url,
+        conn_max_age=600,
+        conn_health_checks=True,
+    )
 }
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -201,10 +206,17 @@ DOCUSAURUS_BUILD_DIR = Path(
     os.environ.get("ACCESSDOC_DOCUSAURUS_BUILD_DIR", DOCUSAURUS_ROOT / "build")
 ).resolve()
 
-CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "redis://127.0.0.1:6379/0")
-CELERY_RESULT_BACKEND = os.environ.get(
-    "CELERY_RESULT_BACKEND", "redis://127.0.0.1:6379/0"
+# Railway / Heroku Redis addons usually set ``REDIS_URL``; Celery defaults must not stay on
+# ``127.0.0.1`` in production or ``.delay()`` fails silently after upload (task never queued).
+_redis_url = (
+    os.environ.get("CELERY_BROKER_URL", "").strip()
+    or os.environ.get("REDIS_URL", "").strip()
+    or os.environ.get("REDISCLOUD_URL", "").strip()
 )
+if not _redis_url:
+    _redis_url = "redis://127.0.0.1:6379/0"
+CELERY_BROKER_URL = _redis_url
+CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", "").strip() or _redis_url
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = int(os.environ.get("CELERY_TASK_TIME_LIMIT", "3600"))
 

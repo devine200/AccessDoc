@@ -35,7 +35,15 @@ def schedule_process_published_item(item_pk: str) -> None:
 
     def _enqueue() -> None:
         if settings.ACCESSDOC_USE_CELERY:
-            process_published_item.delay(item_pk)
+            try:
+                process_published_item.delay(item_pk)
+            except Exception:
+                logger.exception(
+                    "Failed to queue process_published_item for %s — check Redis "
+                    "(CELERY_BROKER_URL or REDIS_URL) and that the broker is reachable.",
+                    item_pk,
+                )
+                return
             logger.info("Queued process_published_item via Celery for %s", item_pk)
         else:
             t = threading.Thread(
