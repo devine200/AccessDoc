@@ -112,18 +112,19 @@ python manage.py runserver
 - Read-only API (published items only): `http://127.0.0.1:8000/api/items/`
 - Viewer: `http://127.0.0.1:8000/viewer/<item-uuid>/docs/intro/`
 
-## Docker (build + web + Celery worker)
+## Docker (build + web with embedded Celery)
 
 The **Dockerfile** only **prepares the codebase**: Node 20, **`demo_docs/`** `npm ci`, Python deps, **`collectstatic`**. Nothing long-running is started during the image build except what Django needs for static collection.
 
-**`docker compose up --build`** starts four services from that image:
+At **runtime**, the image starts **`celery -A accessdoc worker`** in the background and then **Gunicorn** by default (`ACCESSDOC_EMBEDDED_CELERY_WORKER=1` in the Dockerfile). That way a single container (e.g. one PaaS service) still processes PDF jobs. Set **`ACCESSDOC_EMBEDDED_CELERY_WORKER=0`** if you run a **separate** container with **`ACCESSDOC_CONTAINER_ROLE=worker`** so you do not run two workers.
+
+**`docker compose up --build`** starts three services from that image:
 
 - **postgres** — PostgreSQL 16; user/password/db **`accessdoc`** (override by changing compose `DATABASE_URL` and `POSTGRES_*` together).
 - **redis** — broker and result backend for Celery.
-- **web** — migrates, optional default superuser (**admin** / **admin** unless `SKIP_DEFAULT_SUPERUSER=1`), then **Gunicorn** on port **8000** with **`ACCESSDOC_USE_CELERY=true`** so uploads enqueue tasks.
-- **worker** — migrates, then **only** `celery -A accessdoc worker` (no Gunicorn, no superuser). `ACCESSDOC_CONTAINER_ROLE=worker` selects this path in `docker/entrypoint.sh`.
+- **web** — migrates, optional default superuser (**admin** / **admin** unless `SKIP_DEFAULT_SUPERUSER=1`), **Celery worker** + **Gunicorn** on port **8000**, **`ACCESSDOC_USE_CELERY=true`**.
 
-Named volumes persist **`postgres_data`** (database), **`media/`**, and **`templates/doc_builds/`** so web and worker share Postgres and uploaded files.
+Named volumes persist **`postgres_data`** (database), **`media/`**, and **`templates/doc_builds/`**.
 
 ```bash
 # From repo root — set DJANGO_SECRET_KEY in the environment or a .env file next to compose
