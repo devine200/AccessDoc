@@ -1,14 +1,12 @@
 # AccessDocDemo — image build only prepares the codebase (no DB, no running servers).
-# Runtime: entrypoint runs Celery worker + Gunicorn by default (ACCESSDOC_EMBEDDED_CELERY_WORKER=1).
-# Use ACCESSDOC_CONTAINER_ROLE=worker for Celery-only, or ACCESSDOC_EMBEDDED_CELERY_WORKER=0 with a separate worker.
+# Runtime: use docker-compose (web = Gunicorn, worker = Celery only via entrypoint).
 
 FROM python:3.11-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    ACCESSDOC_REPO_ROOT=/app \
-    ACCESSDOC_EMBEDDED_CELERY_WORKER=1
+    ACCESSDOC_REPO_ROOT=/app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
